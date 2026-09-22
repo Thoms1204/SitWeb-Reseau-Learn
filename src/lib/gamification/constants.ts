@@ -1,0 +1,12 @@
+export const XP_PER_EXERCISE = 10;
+export const XP_RETRY_PENALTY = 2;
+export const XP_MIN_PER_EXERCISE = 2;
+export const XP_LESSON_BONUS = 20;
+export const XP_STREAK_BONUS = 5;
+export const XP_PERFECT_BONUS = 10;
+export const STREAK_BONUS_THRESHOLD = 7;
+export const MAX_STREAK_FREEZES = 2;
+export const STREAK_GRACE_HOURS = 23.98;
+export const MAX_DAILY_REVIEWS = 20;
+export const LEVEL_XP_FORMULA = (level: number) => Math.round(100 * Math.pow(level - 1, 1.5));
+export const REQUIRED_SCORE_PERCENT = 80;
