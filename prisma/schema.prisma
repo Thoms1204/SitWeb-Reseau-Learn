@@ -1,0 +1,349 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  LEARNER
+  CONTENT_ADMIN
+  MODERATOR
+}
+
+enum ExerciseType {
+  MCQ
+  SUBNET_CALC
+  DRAG_DROP
+  TOPOLOGY
+  CLI_SIM
+}
+
+enum LevelProgressStatus {
+  LOCKED
+  UNLOCKED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum LessonProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum XpSource {
+  LESSON
+  EXERCISE
+  STREAK_BONUS
+  REVIEW
+  BADGE
+}
+
+enum GdprCategory {
+  ESSENTIAL
+  ANALYTICS
+  MARKETING
+}
+
+enum GdprRequestType {
+  EXPORT
+  DELETION
+}
+
+enum GdprRequestStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id                       String    @id @default(uuid()) @db.Uuid
+  email                    String    @unique
+  username                 String    @unique
+  password_hash            String?
+  avatar_url               String?
+  role                     Role      @default(LEARNER)
+  email_verified           Boolean   @default(false)
+  email_verification_token String?
+  email_verified_at        DateTime?
+  total_xp                 Int       @default(0)
+  current_level            Int       @default(1)
+  current_streak           Int       @default(0)
+  longest_streak           Int       @default(0)
+  last_activity_at         DateTime?
+  streak_freezes_available Int       @default(1)
+  is_deleted               Boolean   @default(false)
+  deleted_at               DateTime?
+  purge_scheduled_at       DateTime?
+  created_at               DateTime  @default(now())
+  updated_at               DateTime  @updatedAt
+
+  refresh_tokens         RefreshToken[]
+  password_reset_tokens  PasswordResetToken[]
+  level_progress         UserLevelProgress[]
+  lesson_progress        UserLessonProgress[]
+  exercise_attempts      ExerciseAttempt[]
+  spaced_repetition_items SpacedRepetitionItem[]
+  xp_transactions        XpTransaction[]
+  user_badges            UserBadge[]
+  gdpr_consents          GdprConsent[]
+  gdpr_data_requests     GdprDataRequest[]
+  streak_history         StreakHistory[]
+  content_versions       ContentVersion[]
+  oauth_accounts         OAuthAccount[]
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid()) @db.Uuid
+  user_id     String   @db.Uuid
+  token_hash  String   @unique
+  expires_at  DateTime
+  device_info String?
+  is_revoked  Boolean  @default(false)
+  created_at  DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  token_hash String   @unique
+  expires_at DateTime
+  is_used    Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model Level {
+  id                    Int     @id @default(autoincrement())
+  slug                  String  @unique
+  title                 String
+  description           String? @db.Text
+  order_index           Int
+  xp_reward             Int
+  required_score_percent Int     @default(80)
+  icon_url              String?
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  lessons              Lesson[]
+  user_level_progress  UserLevelProgress[]
+  prerequisites        LevelPrerequisite[] @relation("Prerequisites")
+  prerequisite_for     LevelPrerequisite[] @relation("PrerequisiteFor")
+}
+
+model LevelPrerequisite {
+  id                    Int @id @default(autoincrement())
+  level_id              Int
+  prerequisite_level_id Int
+
+  level              Level @relation("Prerequisites", fields: [level_id], references: [id], onDelete: Cascade)
+  prerequisite_level Level @relation("PrerequisiteFor", fields: [prerequisite_level_id], references: [id], onDelete: Cascade)
+
+  @@unique([level_id, prerequisite_level_id])
+}
+
+model Lesson {
+  id          Int     @id @default(autoincrement())
+  level_id    Int
+  slug        String  @unique
+  title       String
+  description String? @db.Text
+  order_index Int
+  xp_reward   Int     @default(20)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  level                Level @relation(fields: [level_id], references: [id], onDelete: Cascade)
+  exercises            Exercise[]
+  user_lesson_progress UserLessonProgress[]
+}
+
+model Exercise {
+  id            Int          @id @default(autoincrement())
+  lesson_id     Int
+  type          ExerciseType
+  question_data Json
+  answer_data   Json
+  feedback_data Json
+  xp_value      Int          @default(10)
+  order_index   Int
+  tolerance     Float        @default(0)
+  created_at    DateTime     @default(now())
+  updated_at    DateTime     @updatedAt
+
+  lesson                  Lesson @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+  attempts                ExerciseAttempt[]
+  spaced_repetition_items SpacedRepetitionItem[]
+}
+
+model UserLevelProgress {
+  id                 String              @id @default(uuid()) @db.Uuid
+  user_id            String              @db.Uuid
+  level_id           Int
+  status             LevelProgressStatus
+  best_score_percent Int                 @default(0)
+  attempts_count     Int                 @default(0)
+  first_completed_at DateTime?
+  last_attempted_at  DateTime?
+
+  user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  level Level @relation(fields: [level_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, level_id])
+}
+
+model UserLessonProgress {
+  id                 String               @id @default(uuid()) @db.Uuid
+  user_id            String               @db.Uuid
+  lesson_id          Int
+  status             LessonProgressStatus
+  best_score_percent Int                  @default(0)
+  attempts_count     Int                  @default(0)
+  completed_at       DateTime?
+
+  user   User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, lesson_id])
+}
+
+model ExerciseAttempt {
+  id             String   @id @default(uuid()) @db.Uuid
+  user_id        String   @db.Uuid
+  exercise_id    Int
+  user_answer    Json
+  is_correct     Boolean
+  xp_earned      Int
+  feedback_shown String?  @db.Text
+  attempt_number Int
+  created_at     DateTime @default(now())
+
+  user     User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  exercise Exercise @relation(fields: [exercise_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, exercise_id])
+}
+
+model SpacedRepetitionItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  user_id        String   @db.Uuid
+  exercise_id    Int
+  repetitions    Int      @default(0)
+  ease_factor    Float    @default(2.5)
+  interval_days  Int      @default(0)
+  next_review_at DateTime
+  grade          Int      @default(0)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  user     User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  exercise Exercise @relation(fields: [exercise_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, exercise_id])
+  @@index([user_id, next_review_at])
+}
+
+model XpTransaction {
+  id           String   @id @default(uuid()) @db.Uuid
+  user_id      String   @db.Uuid
+  amount       Int
+  source       XpSource
+  reference_id String?
+  created_at   DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model Badge {
+  id              Int      @id @default(autoincrement())
+  slug            String   @unique
+  title           String
+  description     String
+  icon_url        String?
+  unlock_criteria Json
+  created_at      DateTime @default(now())
+
+  user_badges UserBadge[]
+}
+
+model UserBadge {
+  id        String   @id @default(uuid()) @db.Uuid
+  user_id   String   @db.Uuid
+  badge_id  Int
+  earned_at DateTime @default(now())
+
+  user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badge_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, badge_id])
+}
+
+model GdprConsent {
+  id            String       @id @default(uuid()) @db.Uuid
+  user_id       String       @db.Uuid
+  category      GdprCategory
+  granted       Boolean
+  ip_address    String?
+  user_agent    String?
+  consented_at  DateTime     @default(now())
+  withdrawn_at  DateTime?
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model GdprDataRequest {
+  id           String            @id @default(uuid()) @db.Uuid
+  user_id      String            @db.Uuid
+  type         GdprRequestType
+  status       GdprRequestStatus
+  download_url String?
+  requested_at DateTime          @default(now())
+  completed_at DateTime?
+  expires_at   DateTime?
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model StreakHistory {
+  id               String   @id @default(uuid()) @db.Uuid
+  user_id          String   @db.Uuid
+  activity_date    DateTime @db.Date
+  freeze_used      Boolean  @default(false)
+  xp_earned_today  Int      @default(0)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, activity_date])
+}
+
+model ContentVersion {
+  id            Int      @id @default(autoincrement())
+  entity_type   String
+  entity_id     Int
+  previous_data Json
+  new_data      Json
+  changed_by    String   @db.Uuid
+  created_at    DateTime @default(now())
+
+  user User @relation(fields: [changed_by], references: [id], onDelete: Cascade)
+}
+
+model OAuthAccount {
+  id                  String   @id @default(uuid()) @db.Uuid
+  user_id             String   @db.Uuid
+  provider            String
+  provider_account_id String
+  created_at          DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([provider, provider_account_id])
+}
